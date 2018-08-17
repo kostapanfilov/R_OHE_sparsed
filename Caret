@@ -1,1 +1,176 @@
+```
+my.xgbLinear<-list(library = c("xgboost"),
 
+                   label = "my.xbglinear",
+
+                   type = "Regression",
+
+                   parameters = data.frame(parameter = c("eta","nround","lambda","alpha","subsample"),
+
+                                           class = c(rep("numeric",5)),
+
+                                           label = c("ETA","NTree","L2","L1", "SS")),
+
+                   # parameters = data.frame(parameter = c("eta","nround","gamma","lambda","alpha"),
+
+                   # class = c(rep("numeric",5)),
+
+                   # label = c("ETA","ree","gamma","L2","L1")),
+
+                   
+
+                   fit = function(x, y, wts, param, lev, last, classProbs, ...){
+
+                     p<-list(...)
+
+                     xfactors<-hashed.model.matrix(formula = "~x+y", data = x, create.mapping = T)
+
+                     dtrain<-xgb.DMatrix(data = xfactors,label = y)
+
+                     attr(dtrain,'bm') <- 1
+
+                     param$booster = "gblinear"
+
+                     #param$max_depth = 2
+
+                     watch = list(mrg = dtrain)
+
+                     
+
+                     out<-xgb.train(params = param,
+
+                                    data = dtrain,
+
+                                    obj = p$objective,
+
+                                    feval = p$eval_metric,
+
+                                    watchlist = watch,
+
+                                    nrounds = param$nround,
+
+                                    verbose = F,
+
+                                    #xgb_model = p$model,
+
+                                    early_stopping_rounds = 20,
+
+                                    maximize = FALSE)
+
+                     #out$mapname <-hash.mapping(xfactors)
+
+                     out$mapname <- unlist(as.list(attr(xfactors, "mapping")))
+
+                     out
+
+                   },
+
+                   predict = function (modelFit, newdata, submodels = NULL) {
+
+                     xfactors<-hashed.model.matrix(formula = "~ x+y", data = newdata, create.mapping = T)
+
+                     dtest<-xgb.DMatrix(data = xfactors)
+
+                     attr(dtest,'bm') <- 1
+
+                     out<-func(predict(modelFit, dtest, ntreelimit = 0), 1)
+
+                     out
+
+                   },
+
+                   prob = function (modelFit, newdata, submodels = NULL) {
+
+                     xfactors<-hashed.model.matrix(formula = "~ x(y", data = newdata, create.mapping = T)
+
+                     dtest<-xgb.DMatrix(data = xfactors)
+
+                     attr(dtest,'bm') <- 1
+
+                     out<-func(predict(modelFit, dtest,ntreelimit = 0), 1)
+
+                     
+
+                     if (length(modelFit$obsLevels) == 2) {
+
+                       out <- cbind(out, 1 - out)
+
+                       colnames(out) <- modelFit$obsLevels
+
+                     }
+
+                     else {
+
+                       out <- matrix(out, ncol = length(modelFit$obsLevels), 
+
+                                     byrow = TRUE)
+
+                       colnames(out) <- modelFit$obsLevels
+
+                     }
+
+                     as.data.frame(out)
+
+                   },
+
+                   grid = function (x, y, len = NULL, search = "grid") {
+
+                     if (search == "grid") {
+
+                       out <- expand.grid(lambda = c(0, 10^seq(-1, -4, length = len - 1)), alpha = c(0, 10^seq(-1, -4, length = len - 1)), 
+
+                                          nrounds = floor((1:len) * 50), eta = 0.3)
+
+                     }
+
+                     else {
+
+                       out <- data.frame(lambda = 10^runif(len, min = -5, 0), 
+
+                                         alpha = 10^runif(len, min = -5, 0), nrounds = sample(1:100, 
+
+                                                                                              size = len, replace = TRUE), eta = runif(len, 
+
+                                                                                                                                       max = 3))
+
+                     }
+
+                     out
+
+                   },
+
+                   predictors<-function (x, ...) {
+
+                     imp <- xgb.importance(x$xNames, model = x)
+
+                     x$xNames[x$xNames %in% imp$Feature]
+
+                   },
+
+                   varImp = function (object){
+
+                     imp <- xgb.importance(model = object)
+
+                     m<-object$mapname
+
+                     
+
+                     #imp <- imp[imp$Feature %in% object$mapname,]
+
+                     imp<-imp %>% inner_join(data.frame(Feature = as.character(m),name = names(m)),by = "Feature") %>% dplyr::select(one_of(c("name", "Gain","Cover","Frequency")))
+
+                     
+
+                     imp <- as.data.frame(imp)[, 1:2]
+
+                     rownames(imp) <- as.character(imp[, 1])
+
+                     imp <- imp[, 2, drop = FALSE]
+
+                     colnames(imp) <- "Overall"
+
+                     imp
+
+                   })
+
+```
